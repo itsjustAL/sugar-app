@@ -431,6 +431,7 @@ function resetCardPosition() {
 
 function onCardDragStart(e) {
   if (!gameActive) return;
+  if (isCardDragging) return; // prevent double-firings from touch+pointer
   e.preventDefault();
   isCardDragging = true;
   const pos = getEventPos(e);
@@ -505,11 +506,14 @@ function onCardDragEnd(e) {
 guessCard.addEventListener('mousedown', onCardDragStart);
 guessCard.addEventListener('touchstart', onCardDragStart, {passive: false});
 
-// Use pointer events for move/end — works on both desktop and mobile
-// and fires on the element that received pointerdown, no document capture issues
+// Pointer events — setPointerCapture ensures move events fire on the card even when
+// pointer leaves the element. But as a fallback, also listen on document.
+guessCard.addEventListener('pointerdown', onCardDragStart);
 guessCard.addEventListener('pointermove', onCardDragMove);
 guessCard.addEventListener('pointerup', onCardDragEnd);
 guessCard.addEventListener('pointercancel', onCardDragEnd);
+document.addEventListener('pointermove', onCardDragMove);
+document.addEventListener('pointerup', onCardDragEnd);
 
 // Also keep mouse listeners on document for desktop drag-outside-card
 document.addEventListener('mousemove', onCardDragMove);
