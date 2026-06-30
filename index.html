@@ -415,11 +415,19 @@ let cardCurrentX = -9999;
 let cardCurrentY = -9999;
 
 function resetCardPosition() {
-  const sugarRect = sugarCanvas.getBoundingClientRect();
-  const cardW = 140, cardH = 38;
-  cardCurrentX = sugarRect.left + sugarRect.width / 2 - cardW / 2;
-  cardCurrentY = sugarRect.bottom + 4;
-  guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
+  // Defer until canvas has real dimensions (screen transition may still be animating)
+  requestAnimationFrame(() => {
+    const sugarRect = sugarCanvas.getBoundingClientRect();
+    if (sugarRect.width === 0 || sugarRect.height === 0) {
+      // Canvas not laid out yet, retry next frame
+      requestAnimationFrame(() => resetCardPosition());
+      return;
+    }
+    const cardW = 140, cardH = 38;
+    cardCurrentX = sugarRect.left + sugarRect.width / 2 - cardW / 2;
+    cardCurrentY = sugarRect.bottom + 4;
+    guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
+  });
 }
 
 function onPointerDown(e) {
@@ -487,15 +495,18 @@ function onPointerUp(e) {
   resetCardPosition();
 }
 
-// Unified pointer events — works for touch, mouse, and stylus
+// pointerdown on card, pointermove/up on document — standard drag pattern.
+// On mobile, finger slides off the 140px card immediately; document-level
+// listeners keep tracking the drag until pointerup. setPointerCapture is
+// kept as backup but is unreliable on iOS Safari.
 guessCard.addEventListener('pointerdown', onPointerDown);
-guessCard.addEventListener('pointermove', onPointerMove);
-guessCard.addEventListener('pointerup', onPointerUp);
-guessCard.addEventListener('pointercancel', onPointerUp);
+document.addEventListener('pointermove', onPointerMove, {passive: false});
+document.addEventListener('pointerup', onPointerUp);
+document.addEventListener('pointercancel', onPointerUp);
 
-// Prevent touch scrolling/zooming on the card and its parent
+// Prevent touch scrolling/zooming globally during drag
 guessCard.addEventListener('touchstart', e => e.preventDefault(), {passive: false});
-guessCard.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
+document.addEventListener('touchmove', e => { if (isCardDragging) e.preventDefault(); }, {passive: false});
 
 // Re-position card on resize/orientation change
 window.addEventListener('resize', () => { if (gameActive) resetCardPosition(); });
