@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sugar — How much sugar is in your food?</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍬</text></svg>">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a0a00">
+<link rel="manifest" href="manifest.json">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#1a0a00;--card-bg:#2a1a10;--text:#f5e6d0;--text-dim:#a08970;
+  --accent:#ff6b35;--accent-glow:rgba(255,107,53,.3);
+  --green:#4ecb71;--red:#ff4757;--gold:#ffd700;
+  --sugar:#f8f0e0;--sugar-dark:#e8d5b8;--sugar-shadow:rgba(180,150,110,.4);
+  --border:rgba(255,200,140,.15);
+  --safe-bottom:env(safe-area-inset-bottom, 0px);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;
+  color:var(--text);user-select:none;touch-action:manipulation;}
+
+/* ── SCREENS ── */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;transition:opacity .4s,transform .4s;
+  opacity:0;transform:translateY(30px);pointer-events:none}
+.screen.active{opacity:1;transform:translateY(0);pointer-events:all}
+
+/* ── START SCREEN ── */
+#start-screen{background:radial-gradient(ellipse at 50% 30%,#3a1a08 0%,#1a0a00 70%)}
+.logo{font-size:64px;margin-bottom:8px;filter:drop-shadow(0 0 30px rgba(255,180,60,.4))}
+.app-title{font-size:38px;font-weight:800;letter-spacing:-.5px;
+  background:linear-gradient(135deg,#ffd700,#ff8c00);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;margin-bottom:4px}
+.app-subtitle{font-size:14px;color:var(--text-dim);margin-bottom:36px;letter-spacing:.5px}
+.play-btn{background:linear-gradient(135deg,#ff6b35,#ff4500);color:#fff;border:none;
+  padding:16px 48px;border-radius:50px;font-size:18px;font-weight:700;
+  letter-spacing:.5px;cursor:pointer;box-shadow:0 4px 20px rgba(255,69,0,.4);
+  transition:transform .2s,box-shadow .2s}
+.play-btn:active{transform:scale(.95);box-shadow:0 2px 10px rgba(255,69,0,.3)}
+.how-to{margin-top:28px;font-size:13px;color:var(--text-dim);text-align:center;
+  line-height:1.6;max-width:280px}
+.how-to strong{color:var(--accent)}
+
+/* ── GAME SCREEN ── */
+#game-screen{background:var(--bg);padding:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  justify-content:flex-start}
+.game-header{width:100%;padding:12px 16px calc(8px + var(--safe-bottom));
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(30,15,5,.9);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);z-index:10}
+.round-badge{font-size:13px;font-weight:600;color:var(--accent);
+  background:rgba(255,107,53,.12);padding:4px 12px;border-radius:20px;
+  border:1px solid rgba(255,107,53,.25)}
+.score-display{font-size:13px;color:var(--text-dim)}
+.score-display span{color:var(--gold);font-weight:700}
+.streak{font-size:11px;color:var(--green);font-weight:600;margin-left:8px}
+
+.food-card{width:calc(100% - 32px);max-width:360px;margin:12px auto 0;
+  background:var(--card-bg);border-radius:20px;padding:20px 20px 16px;
+  border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.5);
+  position:relative;z-index:5}
+.food-emoji{font-size:56px;text-align:center;line-height:1;margin-bottom:8px}
+.food-name{font-size:20px;font-weight:700;text-align:center;margin-bottom:4px}
+.food-serving{font-size:13px;color:var(--text-dim);text-align:center;margin-bottom:16px}
+.sugar-pile-container{width:100%;aspect-ratio:1.4;background:radial-gradient(ellipse at 50% 60%,rgba(60,30,10,.6) 0%,transparent 70%);
+  border-radius:16px;position:relative;overflow:hidden;
+  border:2px solid rgba(255,200,140,.1)}
+.sugar-pile-canvas{width:100%;height:100%;display:block}
+.card-container{width:100%;max-width:360px;margin:0 auto;margin-top:8px;
+  position:relative;height:52px;z-index:10}
+.guess-card{position:absolute;left:50%;top:0;transform:translateX(-50%);
+  width:160px;height:42px;background:linear-gradient(135deg,#ffe8a0 0%,#fff2c0 30%,#d4a830 70%,#8a6010 100%);
+  border-radius:8px;cursor:grab;
+  box-shadow:0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,245,180,.5);
+  touch-action:none;z-index:20;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#5a3a10;letter-spacing:1px;
+  transition:box-shadow .15s}
+.guess-card.dragging{cursor:grabbing;box-shadow:0 2px 8px rgba(0,0,0,.8)}
+.guess-card::before{content:'';position:absolute;inset:2px;border-radius:6px;
+  border:1px solid rgba(255,245,180,.3);pointer-events:none}
+.drag-hint{font-size:11px;color:var(--text-dim);text-align:center;margin-top:8px;
+  opacity:.7;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:.9}}
+
+/* ── GUESS PANEL ── */
+.guess-panel{width:calc(100% - 32px);max-width:360px;margin:12px auto;
+  background:var(--card-bg);border-radius:20px;padding:20px;
+  border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.guess-label{font-size:13px;color:var(--text-dim);text-align:center;margin-bottom:8px;
+  letter-spacing:.5px;text-transform:uppercase}
+.guess-value{font-size:48px;font-weight:800;text-align:center;
+  color:var(--accent);line-height:1;margin-bottom:4px}
+.guess-unit{font-size:14px;color:var(--text-dim);text-align:center;margin-bottom:16px}
+.guess-slider{width:100%;-webkit-appearance:none;appearance:none;height:6px;
+  border-radius:3px;background:linear-gradient(to right,var(--green),var(--accent),var(--red));
+  outline:none;margin:0 0 20px}
+.guess-slider::-webkit-slider-thumb{-webkit-appearance:none;width:32px;height:32px;
+  border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer}
+.guess-slider::-moz-range-thumb{width:32px;height:32px;border-radius:50%;
+  background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;border:none}
+.slider-labels{display:flex;justify-content:space-between;font-size:11px;
+  color:var(--text-dim);margin-top:-12px;margin-bottom:12px}
+.lock-btn{width:100%;padding:14px;border:none;border-radius:14px;font-size:16px;
+  font-weight:700;cursor:pointer;transition:all .2s;
+  background:linear-gradient(135deg,var(--accent),#ff4500);color:#fff;
+  box-shadow:0 4px 16px rgba(255,69,0,.3)}
+.lock-btn:active{transform:scale(.97)}
+
+/* ── RESULT SCREEN ── */
+#result-screen{background:radial-gradient(ellipse at 50% 30%,#3a1a08 0%,#1a0a00 70%)}
+.result-emoji{font-size:80px;margin-bottom:8px}
+.result-title{font-size:28px;font-weight:800;margin-bottom:8px}
+.result-title.close{color:var(--gold)}
+.result-title.far{color:var(--red)}
+.result-title.perfect{color:var(--green)}
+.result-subtitle{font-size:14px;color:var(--text-dim);margin-bottom:24px}
+.result-box{background:var(--card-bg);border-radius:16px;padding:20px;
+  border:1px solid var(--border);width:calc(100% - 64px);max-width:320px;margin-bottom:24px}
+.result-row{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 0;border-bottom:1px solid var(--border)}
+.result-row:last-child{border-bottom:none}
+.result-label{font-size:13px;color:var(--text-dim)}
+.result-value{font-size:16px;font-weight:700}
+.result-value.actual{color:var(--gold)}
+.result-value.guess{color:var(--accent)}
+.result-value.diff{color:var(--green)}
+.result-value.diff.bad{color:var(--red)}
+.result-points{font-size:42px;font-weight:800;color:var(--accent);margin-bottom:8px}
+.next-btn{background:linear-gradient(135deg,var(--accent),#ff4500);color:#fff;
+  border:none;padding:16px 48px;border-radius:50px;font-size:17px;font-weight:700;
+  cursor:pointer;box-shadow:0 4px 20px rgba(255,69,0,.4)}
+.next-btn:active{transform:scale(.95)}
+
+/* ── GAME OVER ── */
+#gameover-screen{background:radial-gradient(ellipse at 50% 30%,#3a1a08 0%,#1a0a00 70%)}
+.gameover-title{font-size:32px;font-weight:800;margin-bottom:4px;
+  background:linear-gradient(135deg,#ffd700,#ff8c00);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent}
+.gameover-subtitle{font-size:14px;color:var(--text-dim);margin-bottom:32px}
+.final-score{font-size:72px;font-weight:800;color:var(--accent);line-height:1;margin-bottom:4px}
+.final-score-label{font-size:13px;color:var(--text-dim);text-align:center;margin-bottom:24px}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;
+  width:calc(100% - 64px);max-width:320px;margin-bottom:28px}
+.stat-card{background:var(--card-bg);border-radius:12px;padding:14px;
+  border:1px solid var(--border);text-align:center}
+.stat-value{font-size:24px;font-weight:700;color:var(--gold)}
+.stat-label{font-size:11px;color:var(--text-dim);margin-top:2px}
+.share-btn{width:calc(100% - 64px);max-width:320px;padding:14px;border-radius:14px;
+  font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;
+  background:var(--card-bg);color:var(--text);border:1px solid var(--border)}
+.play-again-btn{width:calc(100% - 64px);max-width:320px;padding:16px;border-radius:50px;
+  font-size:17px;font-weight:700;cursor:pointer;border:none;
+  background:linear-gradient(135deg,var(--accent),#ff4500);color:#fff;
+  box-shadow:0 4px 20px rgba(255,69,0,.4)}
+
+/* ── ANIMATIONS ── */
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes countUp{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.anim-up{animation:slideUp .5s ease-out both}
+.anim-count{animation:countUp .3s ease-out both}
+</style>
+</head>
+<body>
+
+<!-- START SCREEN -->
+<div id="start-screen" class="screen active">
+  <div class="logo">🍬</div>
+  <div class="app-title">SUGAR</div>
+  <div class="app-subtitle">How much sugar is hiding in your food?</div>
+  <button class="play-btn" id="play-btn">PLAY</button>
+  <div class="how-to">
+    <strong>Guess</strong> how many grams of sugar are in the food shown.<br>
+    Drag the card through the pile to reveal.<br>
+    The closer your guess, the more points you earn.
+  </div>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="game-screen" class="screen">
+  <div class="game-header">
+    <div class="round-badge" id="round-badge">Round 1/10</div>
+    <div class="score-display">Score: <span id="score-display">0</span><span class="streak" id="streak-display"></span></div>
+  </div>
+  <div class="food-card" id="food-card">
+    <div class="food-emoji" id="food-emoji">🍩</div>
+    <div class="food-name" id="food-name">Glazed Donut</div>
+    <div class="food-serving" id="food-serving">1 serving (60g)</div>
+    <div class="sugar-pile-container">
+      <canvas class="sugar-pile-canvas" id="sugar-canvas"></canvas>
+    </div>
+  </div>
+  <div class="card-container">
+    <div class="guess-card" id="guess-card">↔ DRAG</div>
+  </div>
+  <div class="drag-hint">↔ drag the card through the sugar to spread it</div>
+  <div class="guess-panel" id="guess-panel">
+    <div class="guess-label">How many grams of sugar?</div>
+    <div class="guess-value" id="guess-value">0g</div>
+    <div class="guess-unit">of sugar in this food</div>
+    <input type="range" class="guess-slider" id="guess-slider" min="0" max="80" value="10" step="1">
+    <div class="slider-labels"><span>0g</span><span>20g</span><span>40g</span><span>60g</span><span>80g</span></div>
+    <button class="lock-btn" id="lock-btn">🔒 LOCK IN GUESS</button>
+  </div>
+</div>
+
+<!-- RESULT SCREEN -->
+<div id="result-screen" class="screen">
+  <div class="result-emoji" id="result-emoji">🎯</div>
+  <div class="result-title" id="result-title">Close!</div>
+  <div class="result-subtitle" id="result-subtitle">You were 3g off</div>
+  <div class="result-box">
+    <div class="result-row"><span class="result-label">Actual sugar</span><span class="result-value actual" id="result-actual">24g</span></div>
+    <div class="result-row"><span class="result-label">Your guess</span><span class="result-value guess" id="result-guess">21g</span></div>
+    <div class="result-row"><span class="result-label">Difference</span><span class="result-value diff" id="result-diff">3g</span></div>
+  </div>
+  <div class="result-points" id="result-points">+70</div>
+  <div class="result-subtitle" id="result-fact" style="margin-top:-8px;font-style:italic"></div>
+  <button class="next-btn" id="next-btn">NEXT →</button>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameover-screen" class="screen">
+  <div class="gameover-title">Game Over</div>
+  <div class="gameover-subtitle">Here's how you did</div>
+  <div class="final-score" id="final-score">0</div>
+  <div class="final-score-label">points</div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-value" id="stat-correct">0</div><div class="stat-label">Within 5g</div></div>
+    <div class="stat-card"><div class="stat-value" id="stat-streak">0</div><div class="stat-label">Best Streak</div></div>
+    <div class="stat-card"><div class="stat-value" id="stat-perfect">0</div><div class="stat-label">Perfect (±1g)</div></div>
+    <div class="stat-card"><div class="stat-value" id="stat-avg">0g</div><div class="stat-label">Avg. Error</div></div>
+  </div>
+  <button class="share-btn" id="share-btn">📤 Share Result</button>
+  <button class="play-again-btn" id="play-again-btn">🔄 Play Again</button>
+</div>
+
+<script>
+'use strict';
+
+// ── FOOD DATABASE ──
+const FOODS = [
+  {emoji:'🍩',name:'Glazed Donut',serving:'1 donut (60g)',grams:24,fact:'Same as 6 sugar packets'},
+  {emoji:'🥤',name:'Coca-Cola',serving:'1 can (355ml)',grams:39,fact:"That's nearly 10 sugar cubes"},
+  {emoji:'🍦',name:'Vanilla Ice Cream',serving:'1/2 cup (66g)',grams:14,fact:'Would need 22 minutes of jogging to burn'},
+  {emoji:'🧁',name:'Chocolate Cupcake',serving:'1 cupcake with frosting',grams:26,fact:'More sugar than a Snickers bar'},
+  {emoji:'🍯',name:'Honey',serving:'1 tablespoon',grams:17,fact:"Nature's sugar — still sugar"},
+  {emoji:'🥛',name:'Chocolate Milk',serving:'1 cup (240ml)',grams:24,fact:'Same as 2 glazed donuts'},
+  {emoji:'🍊',name:'Orange Juice',serving:'1 cup (240ml)',grams:22,fact:'No fiber to slow absorption'},
+  {emoji:'🍞',name:'Cinnamon Raisin Bagel',serving:'1 bagel',grams:12,fact:'Who expects sugar in bread?'},
+  {emoji:'🍝',name:'Marinara Pasta Sauce',serving:'1/2 cup (130g)',grams:10,fact:'Hidden sugar in "savory" food'},
+  {emoji:'🍌',name:'Banana',serving:'1 medium banana',grams:14,fact:'Natural, but still 3.5 tsp of sugar'},
+  {emoji:'🥤',name:'Mountain Dew',serving:'1 can (355ml)',grams:46,fact:'The sugar king of sodas'},
+  {emoji:'🍿',name:'Caramel Popcorn',serving:'1 oz (28g)',grams:12,fact:'Sweet AND carby'},
+  {emoji:'🥜',name:'Peanut Butter (Sweetened)',serving:'2 tablespoons',grams:6,fact:'Natural PB has 1g. This has 6g.'},
+  {emoji:'🍎',name:'Apple',serving:'1 medium apple',grams:19,fact:'With fiber, but still 5 tsp of sugar'},
+  {emoji:'🧃',name:'Cranberry Juice',serving:'1 cup (240ml)',grams:30,fact:'Cranberries are tart. Sugar fixes that.'},
+  {emoji:'🍦',name:'McFlurry (Oreo)',serving:'Regular size',grams:59,fact:'Nearly 15 sugar cubes in one cup'},
+  {emoji:'🥤',name:'Starbucks Frappuccino',serving:'Grande (16oz)',grams:46,fact:'More sugar than 2 cans of Coke'},
+  {emoji:'🥣',name:'Fruit Yogurt',serving:'1 cup',grams:26,fact:'Often more sugar than ice cream'},
+  {emoji:'🥗',name:'Fruit & Nut Granola Bar',serving:'1 bar (40g)',grams:12,fact:"Health halo doesn't mean low sugar"},
+  {emoji:'🧇',name:'Maple Syrup',serving:'1 tablespoon',grams:14,fact:'Pure maple — still 52g per 1/4 cup'},
+];
+
+// ── DOM REFS ──
+const sugarCanvas = document.getElementById('sugar-canvas');
+const sCtx = sugarCanvas.getContext('2d');
+const guessCard = document.getElementById('guess-card');
+const guessSlider = document.getElementById('guess-slider');
+const lockBtn = document.getElementById('lock-btn');
+const nextBtn = document.querySelector('#result-screen .next-btn');
+
+// ── GAME STATE ──
+let currentRound = 0;
+let totalScore = 0;
+let streak = 0;
+let maxStreak = 0;
+let perfectCount = 0;
+let correctCount = 0;
+let totalError = 0;
+let currentFood = null;
+let guessValue = 10;
+let shuffledFoods = [];
+let gameActive = false;
+let particles = [];
+let sugarLoopId = null;
+
+// ── HELPERS ──
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── SUGAR PARTICLE SYSTEM ──
+function initSugar(grams) {
+  const rect = sugarCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const W = rect.width;
+  const H = rect.height;
+  
+  sugarCanvas.width = W * dpr;
+  sugarCanvas.height = H * dpr;
+  sCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  
+  const cx = W / 2;
+  const cy = H * 0.48;
+  const pileR = Math.min(W, H) * 0.28;
+  const count = Math.min(600 + grams * 80, 12000);
+  const pileHeight = Math.min(H * 0.5, 30 + grams * 1.5);
+  
+  particles = [];
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = pileR * Math.sqrt(Math.random()) * (0.6 + Math.random() * 0.4);
+    const px = cx + Math.cos(angle) * r;
+    const distFromCenter = Math.abs(px - cx) / pileR;
+    const maxY = cy + pileHeight * (1 - distFromCenter * distFromCenter);
+    const minY = cy - pileHeight * 0.3;
+    const py = minY + (maxY - minY) * Math.random();
+    
+    const size = 0.8 + Math.random() * 1.8;
+    const brightness = 210 + Math.floor(Math.random() * 45);
+    const warmth = Math.floor(Math.random() * 15);
+    const rc = Math.min(255, brightness + warmth);
+    const gc = Math.min(255, brightness + warmth - 5);
+    const bc = Math.min(255, brightness - 5 + Math.floor(Math.random() * 10));
+    
+    particles.push({
+      x: px, y: py,
+      origX: px, origY: py,
+      vx: 0, vy: 0,
+      size: size,
+      color: `rgb(${rc},${gc},${bc})`,
+      depth: Math.random()
+    });
+  }
+}
+
+function drawSugar() {
+  if (!gameActive) return;
+  const rect = sugarCanvas.getBoundingClientRect();
+  const W = rect.width;
+  const H = rect.height;
+  
+  sCtx.clearRect(0, 0, W, H);
+  
+  // Shadow under pile
+  sCtx.beginPath();
+  sCtx.ellipse(W / 2, H * 0.48 + 10, W * 0.22, H * 0.06, 0, 0, Math.PI * 2);
+  sCtx.fillStyle = 'rgba(100,60,20,0.15)';
+  sCtx.fill();
+  
+  // Draw particles sorted by depth
+  const sorted = [...particles].sort((a, b) => b.depth - a.depth);
+  for (const p of sorted) {
+    // Animate particles drifting back slowly
+    if (p.vx !== 0 || p.vy !== 0) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.92;
+      p.vy *= 0.92;
+      // Gravity
+      p.vy += 0.05;
+      // Settle back toward original position
+      const dx = p.origX - p.x;
+      const dy = p.origY - p.y;
+      p.vx += dx * 0.01;
+      p.vy += dy * 0.01;
+      // Snap to rest
+      if (Math.abs(p.vx) < 0.01 && Math.abs(p.vy) < 0.01 && Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+        p.vx = 0; p.vy = 0; p.x = p.origX; p.y = p.origY;
+      }
+    }
+    
+    sCtx.beginPath();
+    sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+    sCtx.fillStyle = p.color;
+    sCtx.fill();
+  }
+  
+  sugarLoopId = requestAnimationFrame(drawSugar);
+}
+
+function startSugarLoop() {
+  stopSugarLoop();
+  sugarLoopId = requestAnimationFrame(drawSugar);
+}
+
+function stopSugarLoop() {
+  if (sugarLoopId) {
+    cancelAnimationFrame(sugarLoopId);
+    sugarLoopId = null;
+  }
+}
+
+// ── CARD DRAG ──
+let isCardDragging = false;
+let cardDragStartX = 0;
+let cardCenterX = 0; // screen X of card center at drag start
+
+function getEventPos(e) {
+  if (e.touches && e.touches.length) return e.touches[0];
+  if (e.changedTouches && e.changedTouches.length) return e.changedTouches[0];
+  return e;
+}
+
+function onCardDragStart(e) {
+  if (!gameActive) return;
+  e.preventDefault();
+  isCardDragging = true;
+  const pos = getEventPos(e);
+  cardDragStartX = pos.clientX;
+  // Get current card center position on screen
+  const rect = guessCard.getBoundingClientRect();
+  cardCenterX = rect.left + rect.width / 2;
+  guessCard.classList.add('dragging');
+  // Position card at its current spot using pixel left + translateX(-50%)
+  guessCard.style.left = cardCenterX + 'px';
+  guessCard.style.transform = 'translateX(-50%)';
+  // Capture pointer events on the card itself for reliable mobile dragging
+  if (guessCard.setPointerCapture && e.pointerId !== undefined) {
+    guessCard.setPointerCapture(e.pointerId);
+  }
+}
+
+function onCardDragMove(e) {
+  if (!isCardDragging || !gameActive) return;
+  e.preventDefault();
+  const pos = getEventPos(e);
+  const dx = pos.clientX - cardDragStartX;
+  const newCenterX = cardCenterX + dx;
+  
+  // Clamp within container
+  const containerRect = guessCard.parentElement.getBoundingClientRect();
+  const halfCard = 80; // 160px / 2
+  const minX = containerRect.left + halfCard;
+  const maxX = containerRect.right - halfCard;
+  const clampedX = Math.max(minX, Math.min(maxX, newCenterX));
+  
+  guessCard.style.left = clampedX + 'px';
+  guessCard.style.transform = 'translateX(-50%)';
+  
+  // Push sugar particles
+  if (particles.length > 0) {
+    const cardRect = guessCard.getBoundingClientRect();
+    const canvasRect = sugarCanvas.getBoundingClientRect();
+    // Convert card center to canvas-local coords
+    const cardCX = (cardRect.left + cardRect.width / 2) - canvasRect.left;
+    const cardCY = (cardRect.top + cardRect.height / 2) - canvasRect.top;
+    
+    const pushRadius = 70;
+    for (const p of particles) {
+      const dist = Math.hypot(p.x - cardCX, p.y - cardCY);
+      if (dist < pushRadius && dist > 0) {
+        const angle = Math.atan2(p.y - cardCY, p.x - cardCX);
+        const force = (pushRadius - dist) / pushRadius;
+        p.vx += Math.cos(angle) * force * 5;
+        p.vy += Math.sin(angle) * force * 5;
+      }
+    }
+  }
+}
+
+function onCardDragEnd(e) {
+  if (!isCardDragging) return;
+  isCardDragging = false;
+  guessCard.classList.remove('dragging');
+  // Release pointer capture if we had it
+  if (e && e.pointerId !== undefined && guessCard.hasPointerCapture && guessCard.hasPointerCapture(e.pointerId)) {
+    guessCard.releasePointerCapture(e.pointerId);
+  }
+  // Reset card to center
+  guessCard.style.left = '50%';
+  guessCard.style.transform = 'translateX(-50%)';
+}
+
+guessCard.addEventListener('mousedown', onCardDragStart);
+guessCard.addEventListener('touchstart', onCardDragStart, {passive: false});
+
+// Use pointer events for move/end — works on both desktop and mobile
+// and fires on the element that received pointerdown, no document capture issues
+guessCard.addEventListener('pointermove', onCardDragMove);
+guessCard.addEventListener('pointerup', onCardDragEnd);
+guessCard.addEventListener('pointercancel', onCardDragEnd);
+
+// Also keep mouse listeners on document for desktop drag-outside-card
+document.addEventListener('mousemove', onCardDragMove);
+document.addEventListener('mouseup', onCardDragEnd);
+
+// Touch listeners directly on the card (not document) for reliable mobile drag
+guessCard.addEventListener('touchmove', onCardDragMove, {passive: false});
+guessCard.addEventListener('touchend', onCardDragEnd);
+guessCard.addEventListener('touchcancel', onCardDragEnd);
+
+// ── SLIDER ──
+guessSlider.addEventListener('input', () => {
+  guessValue = parseInt(guessSlider.value);
+  document.getElementById('guess-value').textContent = guessValue + 'g';
+});
+
+// ── GAME FLOW ──
+function startGame() {
+  currentRound = 0;
+  totalScore = 0;
+  streak = 0;
+  maxStreak = 0;
+  perfectCount = 0;
+  correctCount = 0;
+  totalError = 0;
+  shuffledFoods = shuffle(FOODS).slice(0, 10);
+  gameActive = true;
+  showScreen('game-screen');
+  setupRound();
+}
+
+function setupRound() {
+  if (currentRound >= 10) {
+    showGameOver();
+    return;
+  }
+  currentFood = shuffledFoods[currentRound];
+  
+  document.getElementById('round-badge').textContent = `Round ${currentRound + 1}/10`;
+  document.getElementById('score-display').textContent = totalScore;
+  document.getElementById('streak-display').textContent = streak > 1 ? `🔥${streak}` : '';
+  document.getElementById('food-emoji').textContent = currentFood.emoji;
+  document.getElementById('food-name').textContent = currentFood.name;
+  document.getElementById('food-serving').textContent = currentFood.serving;
+  
+  // Reset guess
+  guessValue = 10;
+  guessSlider.value = 10;
+  guessSlider.disabled = false;
+  document.getElementById('guess-value').textContent = '10g';
+  lockBtn.textContent = '🔒 LOCK IN GUESS';
+  lockBtn.disabled = false;
+  
+  // Reset card position
+  guessCard.style.left = '50%';
+  guessCard.style.transform = 'translateX(-50%)';
+  
+  // Init sugar
+  gameActive = true;
+  setTimeout(() => {
+    initSugar(currentFood.grams);
+    startSugarLoop();
+  }, 150);
+}
+
+function submitGuess() {
+  if (!gameActive) return;
+  gameActive = false;
+  stopSugarLoop();
+  
+  const actual = currentFood.grams;
+  const guess = guessValue;
+  const diff = Math.abs(actual - guess);
+  
+  let points = 0, emoji = '', title = '', titleClass = '';
+  
+  if (diff === 0) {
+    points = 150; emoji = '🏆'; title = 'PERFECT!'; titleClass = 'perfect';
+    perfectCount++; streak++;
+  } else if (diff <= 2) {
+    points = 100; emoji = '🎯'; title = 'Amazing!'; titleClass = 'perfect';
+    streak++;
+  } else if (diff <= 5) {
+    points = 70; emoji = '👏'; title = 'Close!'; titleClass = 'close';
+    correctCount++; streak++;
+  } else if (diff <= 10) {
+    points = 40; emoji = '🤔'; title = 'Not Bad'; titleClass = 'close';
+    streak = diff <= 7 ? streak + 1 : 0;
+  } else {
+    points = 10; emoji = '😱'; title = diff > actual ? 'Way Over!' : 'Way Under!'; titleClass = 'far';
+    streak = 0;
+  }
+  
+  totalScore += points;
+  maxStreak = Math.max(maxStreak, streak);
+  totalError += diff;
+  
+  document.getElementById('result-emoji').textContent = emoji;
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-title').className = 'result-title ' + titleClass;
+  document.getElementById('result-subtitle').textContent = diff === 0 ? 'Exact match!' : `You were ${diff}g off`;
+  document.getElementById('result-actual').textContent = actual + 'g';
+  document.getElementById('result-guess').textContent = guess + 'g';
+  document.getElementById('result-diff').textContent = diff + 'g';
+  document.getElementById('result-diff').className = 'result-value diff' + (diff > 5 ? ' bad' : '');
+  document.getElementById('result-points').textContent = '+' + points;
+  document.getElementById('result-fact').textContent = currentFood.fact;
+  
+  showScreen('result-screen');
+}
+
+function proceedToNext() {
+  currentRound++;
+  if (currentRound >= 10) {
+    showGameOver();
+    return;
+  }
+  showScreen('game-screen');
+  setupRound();
+}
+
+function showGameOver() {
+  document.getElementById('final-score').textContent = totalScore;
+  document.getElementById('stat-correct').textContent = correctCount;
+  document.getElementById('stat-streak').textContent = maxStreak;
+  document.getElementById('stat-perfect').textContent = perfectCount;
+  document.getElementById('stat-avg').textContent = Math.round(totalError / 10) + 'g';
+  showScreen('gameover-screen');
+}
+
+function restartGame() { startGame(); }
+
+function shareResult() {
+  const text = `🍬 SUGAR — How much sugar is in your food?\nI scored ${totalScore} points!\nBest streak: ${maxStreak} 🔥\nCan you beat me?`;
+  if (navigator.share) {
+    navigator.share({ title: 'SUGAR', text: text });
+  } else {
+    navigator.clipboard.writeText(text).then(() => alert('Copied to clipboard!'));
+  }
+}
+
+// ── WIRE UP BUTTONS ──
+document.getElementById('play-btn').addEventListener('click', startGame);
+lockBtn.addEventListener('click', submitGuess);
+nextBtn.addEventListener('click', proceedToNext);
+document.getElementById('play-again-btn').addEventListener('click', restartGame);
+document.getElementById('share-btn').addEventListener('click', shareResult);
+
+// ── SERVICE WORKER (PWA) ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
