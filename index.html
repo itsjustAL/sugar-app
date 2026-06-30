@@ -71,14 +71,15 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   border:2px solid rgba(255,200,140,.1)}
 .sugar-pile-canvas{width:100%;height:100%;display:block}
 .card-container{width:100%;max-width:360px;margin:0 auto;margin-top:4px;
-  position:relative;height:0;z-index:10;pointer-events:none}
+  position:relative;height:0;z-index:10;pointer-events:auto}
 .guess-card{position:fixed;left:0;top:0;
   width:140px;height:38px;background:linear-gradient(135deg,#ffe8a0 0%,#fff2c0 30%,#d4a830 70%,#8a6010 100%);
   border-radius:8px;cursor:grab;
   box-shadow:0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,245,180,.5);
   touch-action:none;z-index:100;display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:700;color:#5a3a10;letter-spacing:1px;
-  transition:box-shadow .15s;will-change:left,top}
+  transition:box-shadow .15s;will-change:transform;
+  transform:translateX(-9999px) translateY(-9999px)}
 .guess-card.dragging{cursor:grabbing;box-shadow:0 2px 8px rgba(0,0,0,.8)}
 .guess-card::before{content:'';position:absolute;inset:2px;border-radius:6px;
   border:1px solid rgba(255,245,180,.3);pointer-events:none}
@@ -405,22 +406,20 @@ function stopSugarLoop() {
   }
 }
 
-// ── CARD DRAG (pointer events only — handles both touch + mouse unified) ──
+// ── CARD DRAG (transform-based, iOS-safe) ──
 let isCardDragging = false;
 let activePointerId = null;
 let cardDragStartX = 0;
 let cardDragStartY = 0;
-let cardStartLeft = 0;
-let cardStartTop = 0;
+let cardCurrentX = -9999;
+let cardCurrentY = -9999;
 
 function resetCardPosition() {
   const sugarRect = sugarCanvas.getBoundingClientRect();
   const cardW = 140, cardH = 38;
-  cardStartLeft = sugarRect.left + sugarRect.width / 2 - cardW / 2;
-  cardStartTop = sugarRect.bottom + 4;
-  guessCard.style.left = cardStartLeft + 'px';
-  guessCard.style.top = cardStartTop + 'px';
-  guessCard.style.transform = 'none';
+  cardCurrentX = sugarRect.left + sugarRect.width / 2 - cardW / 2;
+  cardCurrentY = sugarRect.bottom + 4;
+  guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
 }
 
 function onPointerDown(e) {
@@ -431,11 +430,7 @@ function onPointerDown(e) {
   activePointerId = e.pointerId;
   cardDragStartX = e.clientX;
   cardDragStartY = e.clientY;
-  const rect = guessCard.getBoundingClientRect();
-  cardStartLeft = rect.left;
-  cardStartTop = rect.top;
   guessCard.classList.add('dragging');
-  // Capture so we keep getting move events even if pointer leaves the card
   try { guessCard.setPointerCapture(e.pointerId); } catch(err) {}
 }
 
@@ -445,8 +440,8 @@ function onPointerMove(e) {
   e.preventDefault();
   const dx = e.clientX - cardDragStartX;
   const dy = e.clientY - cardDragStartY;
-  const newLeft = cardStartLeft + dx;
-  const newTop = cardStartTop + dy;
+  const newLeft = cardCurrentX + dx;
+  const newTop = cardCurrentY + dy;
   
   const cardW = 140, cardH = 38;
   const minX = 4;
@@ -456,9 +451,7 @@ function onPointerMove(e) {
   const clampedLeft = Math.max(minX, Math.min(maxX, newLeft));
   const clampedTop = Math.max(minY, Math.min(maxY, newTop));
   
-  guessCard.style.left = clampedLeft + 'px';
-  guessCard.style.top = clampedTop + 'px';
-  guessCard.style.transform = 'none';
+  guessCard.style.transform = `translateX(${clampedLeft}px) translateY(${clampedTop}px)`;
   
   // Push sugar particles
   if (particles.length > 0) {
@@ -487,6 +480,10 @@ function onPointerUp(e) {
   activePointerId = null;
   guessCard.classList.remove('dragging');
   try { guessCard.releasePointerCapture(e.pointerId); } catch(err) {}
+  // Update current position before reset
+  const rect = guessCard.getBoundingClientRect();
+  cardCurrentX = rect.left;
+  cardCurrentY = rect.top;
   resetCardPosition();
 }
 
@@ -496,9 +493,13 @@ guessCard.addEventListener('pointermove', onPointerMove);
 guessCard.addEventListener('pointerup', onPointerUp);
 guessCard.addEventListener('pointercancel', onPointerUp);
 
-// Prevent touch scrolling/zooming on the card
+// Prevent touch scrolling/zooming on the card and its parent
 guessCard.addEventListener('touchstart', e => e.preventDefault(), {passive: false});
 guessCard.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
+
+// Re-position card on resize/orientation change
+window.addEventListener('resize', () => { if (gameActive) resetCardPosition(); });
+window.addEventListener('orientationchange', () => { setTimeout(() => { if (gameActive) resetCardPosition(); }, 100); });
 
 // ── SLIDER ──
 guessSlider.addEventListener('input', () => {
