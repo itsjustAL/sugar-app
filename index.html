@@ -405,21 +405,15 @@ function stopSugarLoop() {
   }
 }
 
-// ── CARD DRAG (2D: X + Y) ──
+// ── CARD DRAG (pointer events only — handles both touch + mouse unified) ──
 let isCardDragging = false;
+let activePointerId = null;
 let cardDragStartX = 0;
 let cardDragStartY = 0;
-let cardStartLeft = 0; // pixel position at drag start
+let cardStartLeft = 0;
 let cardStartTop = 0;
 
-function getEventPos(e) {
-  if (e.touches && e.touches.length) return e.touches[0];
-  if (e.changedTouches && e.changedTouches.length) return e.changedTouches[0];
-  return e;
-}
-
 function resetCardPosition() {
-  // Position card just below the sugar pile, centered horizontally
   const sugarRect = sugarCanvas.getBoundingClientRect();
   const cardW = 140, cardH = 38;
   cardStartLeft = sugarRect.left + sugarRect.width / 2 - cardW / 2;
@@ -429,40 +423,36 @@ function resetCardPosition() {
   guessCard.style.transform = 'none';
 }
 
-function onCardDragStart(e) {
+function onPointerDown(e) {
   if (!gameActive) return;
-  if (isCardDragging) return; // prevent double-firings from touch+pointer
+  if (isCardDragging) return;
   e.preventDefault();
   isCardDragging = true;
-  const pos = getEventPos(e);
-  cardDragStartX = pos.clientX;
-  cardDragStartY = pos.clientY;
-  // Get current card position
+  activePointerId = e.pointerId;
+  cardDragStartX = e.clientX;
+  cardDragStartY = e.clientY;
   const rect = guessCard.getBoundingClientRect();
   cardStartLeft = rect.left;
   cardStartTop = rect.top;
   guessCard.classList.add('dragging');
-  // Capture pointer events on the card itself for reliable mobile dragging
-  if (guessCard.setPointerCapture && e.pointerId !== undefined) {
-    guessCard.setPointerCapture(e.pointerId);
-  }
+  // Capture so we keep getting move events even if pointer leaves the card
+  try { guessCard.setPointerCapture(e.pointerId); } catch(err) {}
 }
 
-function onCardDragMove(e) {
+function onPointerMove(e) {
   if (!isCardDragging || !gameActive) return;
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
   e.preventDefault();
-  const pos = getEventPos(e);
-  const dx = pos.clientX - cardDragStartX;
-  const dy = pos.clientY - cardDragStartY;
+  const dx = e.clientX - cardDragStartX;
+  const dy = e.clientY - cardDragStartY;
   const newLeft = cardStartLeft + dx;
   const newTop = cardStartTop + dy;
   
-  // Clamp within viewport with some margin
   const cardW = 140, cardH = 38;
   const minX = 4;
   const maxX = window.innerWidth - cardW - 4;
-  const minY = 60; // below game header
-  const maxY = window.innerHeight - cardH - 200; // above guess panel
+  const minY = 60;
+  const maxY = window.innerHeight - cardH - 200;
   const clampedLeft = Math.max(minX, Math.min(maxX, newLeft));
   const clampedTop = Math.max(minY, Math.min(maxY, newTop));
   
@@ -470,11 +460,10 @@ function onCardDragMove(e) {
   guessCard.style.top = clampedTop + 'px';
   guessCard.style.transform = 'none';
   
-  // Push sugar particles using card center
+  // Push sugar particles
   if (particles.length > 0) {
     const cardRect = guessCard.getBoundingClientRect();
     const canvasRect = sugarCanvas.getBoundingClientRect();
-    // Convert card center to canvas-local coords
     const cardCX = (cardRect.left + cardRect.width / 2) - canvasRect.left;
     const cardCY = (cardRect.top + cardRect.height / 2) - canvasRect.top;
     
@@ -491,38 +480,25 @@ function onCardDragMove(e) {
   }
 }
 
-function onCardDragEnd(e) {
+function onPointerUp(e) {
   if (!isCardDragging) return;
+  if (activePointerId !== null && e.pointerId !== activePointerId) return;
   isCardDragging = false;
+  activePointerId = null;
   guessCard.classList.remove('dragging');
-  // Release pointer capture if we had it
-  if (e && e.pointerId !== undefined && guessCard.hasPointerCapture && guessCard.hasPointerCapture(e.pointerId)) {
-    guessCard.releasePointerCapture(e.pointerId);
-  }
-  // Reset card to starting position below sugar pile
+  try { guessCard.releasePointerCapture(e.pointerId); } catch(err) {}
   resetCardPosition();
 }
 
-guessCard.addEventListener('mousedown', onCardDragStart);
-guessCard.addEventListener('touchstart', onCardDragStart, {passive: false});
+// Unified pointer events — works for touch, mouse, and stylus
+guessCard.addEventListener('pointerdown', onPointerDown);
+guessCard.addEventListener('pointermove', onPointerMove);
+guessCard.addEventListener('pointerup', onPointerUp);
+guessCard.addEventListener('pointercancel', onPointerUp);
 
-// Pointer events — setPointerCapture ensures move events fire on the card even when
-// pointer leaves the element. But as a fallback, also listen on document.
-guessCard.addEventListener('pointerdown', onCardDragStart);
-guessCard.addEventListener('pointermove', onCardDragMove);
-guessCard.addEventListener('pointerup', onCardDragEnd);
-guessCard.addEventListener('pointercancel', onCardDragEnd);
-document.addEventListener('pointermove', onCardDragMove);
-document.addEventListener('pointerup', onCardDragEnd);
-
-// Also keep mouse listeners on document for desktop drag-outside-card
-document.addEventListener('mousemove', onCardDragMove);
-document.addEventListener('mouseup', onCardDragEnd);
-
-// Touch listeners directly on the card (not document) for reliable mobile drag
-guessCard.addEventListener('touchmove', onCardDragMove, {passive: false});
-guessCard.addEventListener('touchend', onCardDragEnd);
-guessCard.addEventListener('touchcancel', onCardDragEnd);
+// Prevent touch scrolling/zooming on the card
+guessCard.addEventListener('touchstart', e => e.preventDefault(), {passive: false});
+guessCard.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
 
 // ── SLIDER ──
 guessSlider.addEventListener('input', () => {
