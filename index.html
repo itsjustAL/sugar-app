@@ -377,12 +377,10 @@ function drawSugar() {
   }
   
   if (!anyActive) {
-    // No collisions needed — just draw all particles
+    // No collisions needed — batch draw all particles (fast)
     for (const p of particles) {
-      sCtx.beginPath();
-      sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
       sCtx.fillStyle = p.color;
-      sCtx.fill();
+      sCtx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
     }
     sugarLoopId = requestAnimationFrame(drawSugar);
     return;
@@ -428,10 +426,8 @@ function drawSugar() {
     // Settled particles: draw and skip collision (perf)
     // But still get pushed if an active particle overlaps them (handled from active side)
     if (p.settled) {
-      sCtx.beginPath();
-      sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
       sCtx.fillStyle = p.color;
-      sCtx.fill();
+      sCtx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
       continue;
     }
     // Particle-particle repulsion: direct position separation (keeps volume)
@@ -463,10 +459,8 @@ function drawSugar() {
       }
     }
     
-    sCtx.beginPath();
-    sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
     sCtx.fillStyle = p.color;
-    sCtx.fill();
+    sCtx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
   }
   
   sugarLoopId = requestAnimationFrame(drawSugar);
