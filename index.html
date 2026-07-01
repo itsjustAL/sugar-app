@@ -372,6 +372,25 @@ function drawSugar() {
   
   // Draw particles sorted by depth
   const sorted = [...particles].sort((a, b) => b.depth - a.depth);
+  
+  // Spatial grid for particle-particle repulsion (keeps volume)
+  const cellSize = 6;
+  const cols = Math.ceil(W / cellSize);
+  const rows = Math.ceil(H / cellSize);
+  const grid = new Array(cols * rows);
+  for (let i = 0; i < grid.length; i++) grid[i] = null;
+  
+  // Build grid from active (non-settled) particles
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const cx = Math.floor(p.x / cellSize);
+    const cy = Math.floor(p.y / cellSize);
+    if (cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;
+    const idx = cy * cols + cx;
+    if (!grid[idx]) grid[idx] = [];
+    grid[idx].push(i);
+  }
+  
   for (const p of sorted) {
     // Physics: powder on a flat surface — NO gravity, high friction, stays put
     if (p.vx !== 0 || p.vy !== 0 || !p.settled) {
@@ -389,6 +408,32 @@ function drawSugar() {
       // Snap to rest — looser threshold so particles stop dead
       if (Math.abs(p.vx) < 0.1 && Math.abs(p.vy) < 0.1) {
         p.vx = 0; p.vy = 0; p.settled = true;
+      }
+    }
+    
+    // Particle-particle repulsion: nearby particles push each other apart
+    const px = Math.floor(p.x / cellSize);
+    const py2 = Math.floor(p.y / cellSize);
+    for (let gx = Math.max(0, px - 1); gx <= Math.min(cols - 1, px + 1); gx++) {
+      for (let gy = Math.max(0, py2 - 1); gy <= Math.min(rows - 1, py2 + 1); gy++) {
+        const cell = grid[gy * cols + gx];
+        if (!cell) continue;
+        for (const j of cell) {
+          const q = particles[j];
+          if (q === p) continue;
+          const dx = p.x - q.x;
+          const dy = p.y - q.y;
+          const dist2 = dx * dx + dy * dy;
+          const minDist = (p.size + q.size) * 0.5;
+          if (dist2 < minDist * minDist && dist2 > 0.01) {
+            const dist = Math.sqrt(dist2);
+            const overlap = (minDist - dist) / minDist;
+            const push = overlap * 0.3;
+            p.vx += (dx / dist) * push;
+            p.vy += (dy / dist) * push;
+            p.settled = false;
+          }
+        }
       }
     }
     
