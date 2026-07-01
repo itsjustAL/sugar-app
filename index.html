@@ -83,6 +83,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .guess-card.dragging{cursor:grabbing;box-shadow:0 2px 8px rgba(0,0,0,.8)}
 .guess-card::before{content:'';position:absolute;inset:2px;border-radius:6px;
   border:1px solid rgba(255,245,180,.3);pointer-events:none}
+.guess-card.flipped{background:linear-gradient(135deg,#8a6010 0%,#d4a830 30%,#fff2c0 70%,#ffe8a0 100%)}
+.flip-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border:none;border-radius:50%;
+  background:rgba(90,58,16,.6);color:#ffe8a0;font-size:11px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  pointer-events:auto;touch-action:none;line-height:1;padding:0;z-index:101}
+.flip-btn:active{transform:translateY(-50%) scale(.85)}
 .drag-hint{font-size:11px;color:var(--text-dim);text-align:center;margin-top:8px;
   opacity:.7;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.9}}
@@ -195,7 +202,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
     </div>
   </div>
   <div class="card-container">
-    <div class="guess-card" id="guess-card">↕ DRAG</div>
+    <div class="guess-card" id="guess-card"><span id="card-label">↕ DRAG</span><button class="flip-btn" id="flip-btn">⇅</button></div>
   </div>
   <div class="drag-hint">↕ drag the card up into the sugar to spread it</div>
   <div class="guess-panel" id="guess-panel">
@@ -408,6 +415,22 @@ function stopSugarLoop() {
   }
 }
 
+// ── CARD FLIP ──
+let cardFlipped = false;
+const flipBtn = document.getElementById('flip-btn');
+flipBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
+flipBtn.addEventListener('pointerup', e => {
+  e.stopPropagation(); e.preventDefault();
+  cardFlipped = !cardFlipped;
+  guessCard.classList.toggle('flipped', cardFlipped);
+  document.getElementById('card-label').textContent = cardFlipped ? '⇅ FLIP' : '↕ DRAG';
+  const rect = guessCard.getBoundingClientRect();
+  cardCurrentX = rect.left;
+  cardCurrentY = rect.top;
+  const flipScale = cardFlipped ? -1 : 1;
+  guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px) scaleY(${flipScale})`;
+});
+
 // ── CARD DRAG (transform-based, iOS-safe) ──
 let isCardDragging = false;
 let activePointerId = null;
@@ -428,7 +451,7 @@ function resetCardPosition() {
     const cardW = 140, cardH = 38;
     cardCurrentX = sugarRect.left + sugarRect.width / 2 - cardW / 2;
     cardCurrentY = sugarRect.bottom + 4;
-    guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
+    guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)${cardFlipped ? ' scaleY(-1)' : ''}`;
   });
 }
 
@@ -461,7 +484,7 @@ function onPointerMove(e) {
   const clampedLeft = Math.max(minX, Math.min(maxX, newLeft));
   const clampedTop = Math.max(minY, Math.min(maxY, newTop));
   
-  guessCard.style.transform = `translateX(${clampedLeft}px) translateY(${clampedTop}px)`;
+  guessCard.style.transform = `translateX(${clampedLeft}px) translateY(${clampedTop}px)${cardFlipped ? ' scaleY(-1)' : ''}`;
   
   // Push sugar particles
   if (particles.length > 0) {
