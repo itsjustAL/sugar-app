@@ -370,20 +370,33 @@ function drawSugar() {
   sCtx.fillStyle = 'rgba(100,60,20,0.15)';
   sCtx.fill();
   
-  // Draw particles (no sort — saves O(n log n) per frame on 25k particles)
+  // Fast path: count active particles. If none moving, skip collision entirely.
+  let anyActive = false;
+  for (const p of particles) {
+    if (!p.settled) { anyActive = true; break; }
+  }
   
-  // Spatial grid for particle-particle repulsion (only for active particles)
+  if (!anyActive) {
+    // No collisions needed — just draw all particles
+    for (const p of particles) {
+      sCtx.beginPath();
+      sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+      sCtx.fillStyle = p.color;
+      sCtx.fill();
+    }
+    sugarLoopId = requestAnimationFrame(drawSugar);
+    return;
+  }
+  
+  // Slow path: build spatial grid for collision (only when particles are moving)
   const cellSize = 8;
   const cols = Math.ceil(W / cellSize);
   const rows = Math.ceil(H / cellSize);
   const grid = new Array(cols * rows);
   for (let i = 0; i < grid.length; i++) grid[i] = null;
   
-  // Build grid from ALL particles — settled particles are solid obstacles
-  let activeCount = 0;
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
-    if (!p.settled) activeCount++;
     const cx = Math.floor(p.x / cellSize);
     const cy = Math.floor(p.y / cellSize);
     if (cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;
@@ -412,14 +425,7 @@ function drawSugar() {
       }
     }
     
-    // Particle-particle repulsion: only for active particles, only check neighbors
-    if (p.settled) {
-      sCtx.beginPath();
-      sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
-      sCtx.fillStyle = p.color;
-      sCtx.fill();
-      continue; // skip collision for settled particles — huge perf win
-    }
+    // Particle-particle repulsion: direct position separation (keeps volume)
     const px = Math.floor(p.x / cellSize);
     const py2 = Math.floor(p.y / cellSize);
     for (let gx = Math.max(0, px - 1); gx <= Math.min(cols - 1, px + 1); gx++) {
@@ -427,19 +433,22 @@ function drawSugar() {
         const cell = grid[gy * cols + gx];
         if (!cell) continue;
         for (const j of cell) {
+          if (j <= i) continue; // process each pair once
           const q = particles[j];
-          if (q === p) continue;
           const dx = p.x - q.x;
           const dy = p.y - q.y;
           const dist2 = dx * dx + dy * dy;
           const minDist = (p.size + q.size) * 0.5;
           if (dist2 < minDist * minDist && dist2 > 0.01) {
             const dist = Math.sqrt(dist2);
-            const overlap = (minDist - dist) / minDist;
-            const push = overlap * 0.3;
-            p.vx += (dx / dist) * push;
-            p.vy += (dy / dist) * push;
+            const overlap = (minDist - dist) * 0.5; // split correction equally
+            const nx = dx / dist;
+            const ny = dy / dist;
+            // Direct position correction — both particles move apart
+            p.x += nx * overlap; p.y += ny * overlap;
+            q.x -= nx * overlap; q.y -= ny * overlap;
             p.settled = false;
+            q.settled = false;
           }
         }
       }
