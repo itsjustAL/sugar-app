@@ -78,12 +78,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   box-shadow:0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,245,180,.5);
   touch-action:none;z-index:100;display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:700;color:#5a3a10;letter-spacing:1px;
-  transition:box-shadow .15s,background .3s;will-change:transform;
+  transition:box-shadow .15s,background .3s,width .25s ease,height .25s ease;will-change:transform;
   transform:translateX(-9999px) translateY(-9999px)}
 .guess-card.dragging{cursor:grabbing;box-shadow:0 2px 8px rgba(0,0,0,.8)}
 .guess-card::before{content:'';position:absolute;inset:2px;border-radius:6px;
   border:1px solid rgba(255,245,180,.3);pointer-events:none}
-.guess-card.vertical{width:38px;height:140px;background:linear-gradient(180deg,#ffe8a0 0%,#fff2c0 30%,#d4a830 70%,#8a6010 100%);transition:width .3s ease,height .3s ease}
+.guess-card.vertical{width:38px;height:140px;background:linear-gradient(180deg,#ffe8a0 0%,#fff2c0 30%,#d4a830 70%,#8a6010 100%)}
 .flip-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);
   width:22px;height:22px;border:none;border-radius:50%;
   background:rgba(90,58,16,.6);color:#ffe8a0;font-size:11px;
@@ -295,6 +295,7 @@ let shuffledFoods = [];
 let gameActive = false;
 let particles = [];
 let sugarLoopId = null;
+let activeCount = 0; // count of non-settled particles (for perf gating)
 
 // ── HELPERS ──
 function shuffle(arr) {
@@ -325,10 +326,12 @@ function initSugar(grams) {
   const cx = W / 2;
   const cy = H * 0.48;
   const pileR = Math.min(W, H) * 0.38;
-  const count = Math.min(2000 + grams * 150, 15000);
-  const pileHeight = Math.min(H * 0.6, 50 + grams * 2.5);
+  // Cap particles for mobile perf — 10K is plenty for visual density
+  const count = Math.min(1200 + grams * 100, 10000);
+  const pileHeight = Math.min(H * 0.55, 40 + grams * 2);
   
   particles = [];
+  activeCount = 0;
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
     const r = pileR * Math.sqrt(Math.random()) * (0.6 + Math.random() * 0.4);
@@ -370,14 +373,8 @@ function drawSugar() {
   sCtx.fillStyle = 'rgba(100,60,20,0.15)';
   sCtx.fill();
   
-  // Fast path: count active particles. If none moving, skip collision entirely.
-  let anyActive = false;
-  for (const p of particles) {
-    if (!p.settled) { anyActive = true; break; }
-  }
-  
-  if (!anyActive) {
-    // No collisions needed — batch draw all particles (fast)
+  // ── Fast path: no particles moving — just draw everything ──
+  if (activeCount === 0) {
     for (const p of particles) {
       sCtx.fillStyle = p.color;
       sCtx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
@@ -386,12 +383,12 @@ function drawSugar() {
     return;
   }
   
-  // Slow path: build spatial grid for collision (only when particles are moving)
-  const cellSize = 8;
-  const cols = Math.ceil(W / cellSize);
-  const rows = Math.ceil(H / cellSize);
+  // ── Slow path: particles are moving — run physics + collision ──
+  // Build spatial hash grid (only when needed)
+  const cellSize = 7;
+  const cols = Math.ceil(W / cellSize) + 1;
+  const rows = Math.ceil(H / cellSize) + 1;
   const grid = new Array(cols * rows);
-  for (let i = 0; i < grid.length; i++) grid[i] = null;
   
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
@@ -403,62 +400,65 @@ function drawSugar() {
     grid[idx].push(i);
   }
   
-  for (const p of particles) {
-    // Physics: powder on a flat surface — NO gravity, high friction, stays put
-    if (p.vx !== 0 || p.vy !== 0 || !p.settled) {
+  // Cap how many particles get full collision per frame (perf)
+  // If too many active, only do collision on first N to keep framerate up
+  const COLLISION_CAP = 3000;
+  let collisionDone = 0;
+  
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    
+    // ── Physics step (only for active particles) ──
+    if (!p.settled) {
       p.x += p.vx;
       p.y += p.vy;
-      // High friction — stops fast like flour on a countertop
-      p.vx *= 0.60;
-      p.vy *= 0.60;
-      // No gravity at all — powder doesn't fall on a table
-      // Keep particles inside canvas bounds
+      p.vx *= 0.55; // strong friction — powder stops fast
+      p.vy *= 0.55;
+      // No gravity — powder on a flat surface
       if (p.x < 1) { p.x = 1; p.vx = 0; }
       if (p.x > W - 1) { p.x = W - 1; p.vx = 0; }
-      if (p.y < 1) { p.y = 1; p.vy *= -0.1; }
+      if (p.y < 1) { p.y = 1; p.vy = 0; }
       if (p.y > H - 2) { p.y = H - 2; p.vy = 0; p.vx *= 0.3; }
-      // Snap to rest — looser threshold so particles stop dead
-      if (Math.abs(p.vx) < 0.1 && Math.abs(p.vy) < 0.1) {
+      if (Math.abs(p.vx) < 0.08 && Math.abs(p.vy) < 0.08) {
         p.vx = 0; p.vy = 0; p.settled = true;
+        activeCount--;
       }
     }
     
-    // Settled particles: draw and skip collision (perf)
-    // But still get pushed if an active particle overlaps them (handled from active side)
-    if (p.settled) {
-      sCtx.fillStyle = p.color;
-      sCtx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
-      continue;
-    }
-    // Particle-particle repulsion: direct position separation (keeps volume)
-    const px = Math.floor(p.x / cellSize);
-    const py2 = Math.floor(p.y / cellSize);
-    for (let gx = Math.max(0, px - 1); gx <= Math.min(cols - 1, px + 1); gx++) {
-      for (let gy = Math.max(0, py2 - 1); gy <= Math.min(rows - 1, py2 + 1); gy++) {
-        const cell = grid[gy * cols + gx];
-        if (!cell) continue;
-        for (const j of cell) {
-          if (j === i) continue; // skip self only — active pushes settled too
-          const q = particles[j];
-          const dx = p.x - q.x;
-          const dy = p.y - q.y;
-          const dist2 = dx * dx + dy * dy;
-          const minDist = (p.size + q.size) * 0.5;
-          if (dist2 < minDist * minDist && dist2 > 0.01) {
-            const dist = Math.sqrt(dist2);
-            const overlap = (minDist - dist) * 0.5; // split correction equally
-            const nx = dx / dist;
-            const ny = dy / dist;
-            // Direct position correction — both particles move apart
-            p.x += nx * overlap; p.y += ny * overlap;
-            q.x -= nx * overlap; q.y -= ny * overlap;
-            p.settled = false;
-            q.settled = false;
+    // ── Particle-particle repulsion (keeps volume) ──
+    // Run for active particles, and briefly for their neighbors
+    if (!p.settled && collisionDone < COLLISION_CAP) {
+      collisionDone++;
+      const px = Math.floor(p.x / cellSize);
+      const py2 = Math.floor(p.y / cellSize);
+      for (let gx = Math.max(0, px - 1); gx <= Math.min(cols - 1, px + 1); gx++) {
+        for (let gy = Math.max(0, py2 - 1); gy <= Math.min(rows - 1, py2 + 1); gy++) {
+          const cell = grid[gy * cols + gx];
+          if (!cell) continue;
+          for (const j of cell) {
+            if (j === i) continue;
+            const q = particles[j];
+            const dx = p.x - q.x;
+            const dy = p.y - q.y;
+            const dist2 = dx * dx + dy * dy;
+            const minDist = (p.size + q.size) * 0.5;
+            if (dist2 < minDist * minDist && dist2 > 0.01) {
+              const dist = Math.sqrt(dist2);
+              const overlap = (minDist - dist) * 0.5;
+              const nx = dx / dist;
+              const ny = dy / dist;
+              // Direct position correction — both move apart
+              p.x += nx * overlap; p.y += ny * overlap;
+              q.x -= nx * overlap; q.y -= ny * overlap;
+              // Wake up settled neighbor
+              if (q.settled) { q.settled = false; activeCount++; }
+            }
           }
         }
       }
     }
     
+    // ── Draw ──
     sCtx.fillStyle = p.color;
     sCtx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
   }
@@ -478,7 +478,7 @@ function stopSugarLoop() {
   }
 }
 
-// ── CARD FLIP (rotate 90° landscape ↔ portrait) ──
+// ── CARD FLIP (landscape ↔ portrait orientation) ──
 let cardVertical = false;
 const flipBtn = document.getElementById('flip-btn');
 flipBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
@@ -507,11 +507,9 @@ let cardLastX = null;
 let cardLastY = null;
 
 function resetCardPosition() {
-  // Defer until canvas has real dimensions (screen transition may still be animating)
   requestAnimationFrame(() => {
     const sugarRect = sugarCanvas.getBoundingClientRect();
     if (sugarRect.width === 0 || sugarRect.height === 0) {
-      // Canvas not laid out yet, retry next frame
       requestAnimationFrame(() => resetCardPosition());
       return;
     }
@@ -555,7 +553,7 @@ function onPointerMove(e) {
   
   guessCard.style.transform = `translateX(${clampedLeft}px) translateY(${clampedTop}px)`;
   
-  // Push sugar particles — flat rigid card, no invisible curve
+  // Push sugar particles — flat rigid rectangle, no invisible curve
   if (particles.length > 0) {
     const cardRect = guessCard.getBoundingClientRect();
     const canvasRect = sugarCanvas.getBoundingClientRect();
@@ -567,9 +565,9 @@ function onPointerMove(e) {
     const cardCy = (cardT + cardB) / 2;
     const halfW = (cardR - cardL) / 2;
     const halfH = (cardB - cardT) / 2;
-    // Push zone — small flat margin, not curved
     const margin = 6;
-    // Estimate card velocity from transform delta
+    
+    // Card velocity for directional push
     const cardVelX = clampedLeft - (cardLastX ?? clampedLeft);
     const cardVelY = clampedTop - (cardLastY ?? clampedTop);
     cardLastX = clampedLeft;
@@ -577,38 +575,33 @@ function onPointerMove(e) {
     const speed = Math.sqrt(cardVelX * cardVelX + cardVelY * cardVelY);
     
     for (const p of particles) {
-      // Distance from card center to particle — used for box-shaped push
       const dpx = p.x - cardCx;
       const dpy = p.y - cardCy;
-      const overlapX = halfW + margin - Math.abs(dpx);  // >0 means overlapping horizontally
-      const overlapY = halfH + margin - Math.abs(dpy);  // >0 means overlapping vertically
+      const overlapX = halfW + margin - Math.abs(dpx);
+      const overlapY = halfH + margin - Math.abs(dpy);
       
-      if (overlapX <= 0 || overlapY <= 0) continue;  // particle is outside card
+      if (overlapX <= 0 || overlapY <= 0) continue;
       
-      // Particle is inside the card's rectangle (+margin)
-      // Push it out along the axis with LEAST overlap — flat edge, no curve
+      // Push out along axis of least overlap = flat edge, square corners
       if (overlapX < overlapY) {
-        // Push horizontally — particle is closest to left or right edge
         const dir = dpx > 0 ? 1 : -1;
-        const force = (speed > 0.5 ? Math.max(overlapX, speed * 0.8) : overlapX * 0.8) + 1.5;
+        const force = (speed > 0.5 ? Math.max(overlapX, speed * 0.6) : overlapX * 0.7) + 1.2;
         p.vx += dir * force;
-        // Small vertical jitter from friction with card surface
-        p.vy += (Math.random() - 0.5) * 0.8;
+        p.vy += (Math.random() - 0.5) * 0.6;
       } else {
-        // Push vertically — particle is closest to top or bottom edge
         const dir = dpy > 0 ? 1 : -1;
-        const force = (speed > 0.5 ? Math.max(overlapY, speed * 0.8) : overlapY * 0.8) + 1.5;
+        const force = (speed > 0.5 ? Math.max(overlapY, speed * 0.6) : overlapY * 0.7) + 1.2;
         p.vy += dir * force;
-        p.vx += (Math.random() - 0.5) * 0.8;
+        p.vx += (Math.random() - 0.5) * 0.6;
       }
       
-      // If card is moving, gently drag particles along surface (not fling them)
+      // Drag particles along with card movement (subtle)
       if (speed > 1) {
-        p.vx += cardVelX * 0.15;
-        p.vy += cardVelY * 0.15;
+        p.vx += cardVelX * 0.12;
+        p.vy += cardVelY * 0.12;
       }
       
-      p.settled = false;
+      if (p.settled) { p.settled = false; activeCount++; }
     }
   }
 }
@@ -620,27 +613,20 @@ function onPointerUp(e) {
   activePointerId = null;
   guessCard.classList.remove('dragging');
   try { guessCard.releasePointerCapture(e.pointerId); } catch(err) {}
-  // Update current position before reset
   const rect = guessCard.getBoundingClientRect();
   cardCurrentX = rect.left;
   cardCurrentY = rect.top;
   resetCardPosition();
 }
 
-// pointerdown on card, pointermove/up on document — standard drag pattern.
-// On mobile, finger slides off the 140px card immediately; document-level
-// listeners keep tracking the drag until pointerup. setPointerCapture is
-// kept as backup but is unreliable on iOS Safari.
 guessCard.addEventListener('pointerdown', onPointerDown);
 document.addEventListener('pointermove', onPointerMove, {passive: false});
 document.addEventListener('pointerup', onPointerUp);
 document.addEventListener('pointercancel', onPointerUp);
 
-// Prevent touch scrolling/zooming globally during drag
 guessCard.addEventListener('touchstart', e => e.preventDefault(), {passive: false});
 document.addEventListener('touchmove', e => { if (isCardDragging) e.preventDefault(); }, {passive: false});
 
-// Re-position card on resize/orientation change
 window.addEventListener('resize', () => { if (gameActive) resetCardPosition(); });
 window.addEventListener('orientationchange', () => { setTimeout(() => { if (gameActive) resetCardPosition(); }, 100); });
 
@@ -679,7 +665,6 @@ function setupRound() {
   document.getElementById('food-name').textContent = currentFood.name;
   document.getElementById('food-serving').textContent = currentFood.serving;
   
-  // Reset guess
   guessValue = 10;
   guessSlider.value = 10;
   guessSlider.disabled = false;
@@ -687,12 +672,8 @@ function setupRound() {
   lockBtn.textContent = '🔒 LOCK IN GUESS';
   lockBtn.disabled = false;
   
-  // Reset card position
-  setTimeout(() => {
-    resetCardPosition();
-  }, 200);
+  setTimeout(() => { resetCardPosition(); }, 200);
   
-  // Init sugar
   gameActive = true;
   setTimeout(() => {
     initSugar(currentFood.grams);
