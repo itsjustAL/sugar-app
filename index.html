@@ -83,7 +83,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .guess-card.dragging{cursor:grabbing;box-shadow:0 2px 8px rgba(0,0,0,.8)}
 .guess-card::before{content:'';position:absolute;inset:2px;border-radius:6px;
   border:1px solid rgba(255,245,180,.3);pointer-events:none}
-.guess-card.vertical{width:38px;height:140px;background:linear-gradient(180deg,#ffe8a0 0%,#fff2c0 30%,#d4a830 70%,#8a6010 100%)}
+.guess-card.vertical{width:38px;height:140px;background:linear-gradient(180deg,#ffe8a0 0%,#fff2c0 30%,#d4a830 70%,#8a6010 100%);transition:width .3s ease,height .3s ease}
 .flip-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);
   width:22px;height:22px;border:none;border-radius:50%;
   background:rgba(90,58,16,.6);color:#ffe8a0;font-size:11px;
@@ -413,7 +413,7 @@ function stopSugarLoop() {
   }
 }
 
-// ── CARD FLIP ──
+// ── CARD FLIP (rotate 90° landscape ↔ portrait) ──
 let cardVertical = false;
 const flipBtn = document.getElementById('flip-btn');
 flipBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
@@ -426,6 +426,8 @@ flipBtn.addEventListener('pointerup', e => {
   const rect = guessCard.getBoundingClientRect();
   cardCurrentX = rect.left;
   cardCurrentY = rect.top;
+  cardLastX = null;
+  cardLastY = null;
   guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
 });
 
