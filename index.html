@@ -325,7 +325,7 @@ function initSugar(grams) {
   const cx = W / 2;
   const cy = H * 0.48;
   const pileR = Math.min(W, H) * 0.38;
-  const count = Math.min(4000 + grams * 400, 40000);
+  const count = Math.min(3000 + grams * 250, 25000);
   const pileHeight = Math.min(H * 0.6, 50 + grams * 2.5);
   
   particles = [];
@@ -370,19 +370,20 @@ function drawSugar() {
   sCtx.fillStyle = 'rgba(100,60,20,0.15)';
   sCtx.fill();
   
-  // Draw particles sorted by depth
-  const sorted = [...particles].sort((a, b) => b.depth - a.depth);
+  // Draw particles (no sort — saves O(n log n) per frame on 25k particles)
   
-  // Spatial grid for particle-particle repulsion (keeps volume)
-  const cellSize = 6;
+  // Spatial grid for particle-particle repulsion (only for active particles)
+  const cellSize = 8;
   const cols = Math.ceil(W / cellSize);
   const rows = Math.ceil(H / cellSize);
   const grid = new Array(cols * rows);
   for (let i = 0; i < grid.length; i++) grid[i] = null;
   
-  // Build grid from active (non-settled) particles
+  // Build grid from ALL particles — settled particles are solid obstacles
+  let activeCount = 0;
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
+    if (!p.settled) activeCount++;
     const cx = Math.floor(p.x / cellSize);
     const cy = Math.floor(p.y / cellSize);
     if (cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;
@@ -391,7 +392,7 @@ function drawSugar() {
     grid[idx].push(i);
   }
   
-  for (const p of sorted) {
+  for (const p of particles) {
     // Physics: powder on a flat surface — NO gravity, high friction, stays put
     if (p.vx !== 0 || p.vy !== 0 || !p.settled) {
       p.x += p.vx;
@@ -411,7 +412,14 @@ function drawSugar() {
       }
     }
     
-    // Particle-particle repulsion: nearby particles push each other apart
+    // Particle-particle repulsion: only for active particles, only check neighbors
+    if (p.settled) {
+      sCtx.beginPath();
+      sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+      sCtx.fillStyle = p.color;
+      sCtx.fill();
+      continue; // skip collision for settled particles — huge perf win
+    }
     const px = Math.floor(p.x / cellSize);
     const py2 = Math.floor(p.y / cellSize);
     for (let gx = Math.max(0, px - 1); gx <= Math.min(cols - 1, px + 1); gx++) {
