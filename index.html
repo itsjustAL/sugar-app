@@ -78,12 +78,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
   box-shadow:0 4px 16px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,245,180,.5);
   touch-action:none;z-index:100;display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:700;color:#5a3a10;letter-spacing:1px;
-  transition:box-shadow .15s;will-change:transform;
+  transition:box-shadow .15s,background .3s;will-change:transform;
   transform:translateX(-9999px) translateY(-9999px)}
 .guess-card.dragging{cursor:grabbing;box-shadow:0 2px 8px rgba(0,0,0,.8)}
 .guess-card::before{content:'';position:absolute;inset:2px;border-radius:6px;
   border:1px solid rgba(255,245,180,.3);pointer-events:none}
-.guess-card.flipped{background:linear-gradient(135deg,#8a6010 0%,#d4a830 30%,#fff2c0 70%,#ffe8a0 100%)}
+.guess-card.flipped{background:linear-gradient(135deg,#2a1a10 0%,#3a2a18 30%,#5a3a18 70%,#7a4a20 100%);color:#ffd700}
 .flip-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);
   width:22px;height:22px;border:none;border-radius:50%;
   background:rgba(90,58,16,.6);color:#ffe8a0;font-size:11px;
@@ -423,7 +423,7 @@ flipBtn.addEventListener('pointerup', e => {
   e.stopPropagation(); e.preventDefault();
   cardFlipped = !cardFlipped;
   guessCard.classList.toggle('flipped', cardFlipped);
-  document.getElementById('card-label').textContent = cardFlipped ? '⇅ FLIP' : '↕ DRAG';
+  document.getElementById('card-label').textContent = cardFlipped ? '◆ FLIPPED' : '↕ DRAG';
   const rect = guessCard.getBoundingClientRect();
   cardCurrentX = rect.left;
   cardCurrentY = rect.top;
