@@ -340,11 +340,11 @@ function initSugar(grams) {
     
     particles.push({
       x: px, y: py,
-      origX: px, origY: py,
       vx: 0, vy: 0,
       size: size,
       color: `rgb(${rc},${gc},${bc})`,
-      depth: Math.random()
+      depth: Math.random(),
+      settled: true
     });
   }
 }
@@ -366,22 +366,28 @@ function drawSugar() {
   // Draw particles sorted by depth
   const sorted = [...particles].sort((a, b) => b.depth - a.depth);
   for (const p of sorted) {
-    // Animate particles drifting back slowly
-    if (p.vx !== 0 || p.vy !== 0) {
+    // Physics: particles move, decelerate, gravity pulls down, settle where they land
+    if (p.vx !== 0 || p.vy !== 0 || !p.settled) {
       p.x += p.vx;
       p.y += p.vy;
-      p.vx *= 0.92;
-      p.vy *= 0.92;
+      p.vx *= 0.88;
+      p.vy *= 0.88;
       // Gravity
-      p.vy += 0.05;
-      // Settle back toward original position
-      const dx = p.origX - p.x;
-      const dy = p.origY - p.y;
-      p.vx += dx * 0.01;
-      p.vy += dy * 0.01;
-      // Snap to rest
-      if (Math.abs(p.vx) < 0.01 && Math.abs(p.vy) < 0.01 && Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
-        p.vx = 0; p.vy = 0; p.x = p.origX; p.y = p.origY;
+      p.vy += 0.15;
+      // Floor friction — stop bouncing quickly
+      const floorY = H - 2;
+      if (p.y > floorY) {
+        p.y = floorY;
+        p.vy *= -0.2; // small bounce then stop
+        p.vx *= 0.5;
+        if (Math.abs(p.vy) < 0.5) { p.vy = 0; p.vx = 0; p.settled = true; }
+      }
+      // Wall friction
+      if (p.x < 1) { p.x = 1; p.vx *= -0.3; }
+      if (p.x > W - 1) { p.x = W - 1; p.vx *= -0.3; }
+      // Snap to rest when very slow
+      if (Math.abs(p.vx) < 0.05 && Math.abs(p.vy) < 0.05 && p.y >= floorY - 1) {
+        p.vx = 0; p.vy = 0; p.settled = true;
       }
     }
     
@@ -476,6 +482,7 @@ function onPointerMove(e) {
         const force = (pushRadius - dist) / pushRadius;
         p.vx += Math.cos(angle) * force * 5;
         p.vy += Math.sin(angle) * force * 5;
+        p.settled = false;
       }
     }
   }
