@@ -83,7 +83,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
 .guess-card.dragging{cursor:grabbing;box-shadow:0 2px 8px rgba(0,0,0,.8)}
 .guess-card::before{content:'';position:absolute;inset:2px;border-radius:6px;
   border:1px solid rgba(255,245,180,.3);pointer-events:none}
-.guess-card.flipped{background:linear-gradient(135deg,#2a1a10 0%,#3a2a18 30%,#5a3a18 70%,#7a4a20 100%);color:#ffd700}
+.guess-card.vertical{width:38px;height:140px;background:linear-gradient(180deg,#ffe8a0 0%,#fff2c0 30%,#d4a830 70%,#8a6010 100%)}
 .flip-btn{position:absolute;right:3px;top:50%;transform:translateY(-50%);
   width:22px;height:22px;border:none;border-radius:50%;
   background:rgba(90,58,16,.6);color:#ffe8a0;font-size:11px;
@@ -416,19 +416,19 @@ function stopSugarLoop() {
 }
 
 // ── CARD FLIP ──
-let cardFlipped = false;
+let cardVertical = false;
 const flipBtn = document.getElementById('flip-btn');
 flipBtn.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); });
 flipBtn.addEventListener('pointerup', e => {
   e.stopPropagation(); e.preventDefault();
-  cardFlipped = !cardFlipped;
-  guessCard.classList.toggle('flipped', cardFlipped);
-  document.getElementById('card-label').textContent = cardFlipped ? '◆ FLIPPED' : '↕ DRAG';
+  cardVertical = !cardVertical;
+  guessCard.classList.toggle('vertical', cardVertical);
+  document.getElementById('card-label').textContent = cardVertical ? '↕' : '↕ DRAG';
+  // Re-center card at current position after size change
   const rect = guessCard.getBoundingClientRect();
   cardCurrentX = rect.left;
   cardCurrentY = rect.top;
-  const flipScale = cardFlipped ? -1 : 1;
-  guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px) scaleY(${flipScale})`;
+  guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
 });
 
 // ── CARD DRAG (transform-based, iOS-safe) ──
@@ -448,10 +448,10 @@ function resetCardPosition() {
       requestAnimationFrame(() => resetCardPosition());
       return;
     }
-    const cardW = 140, cardH = 38;
+    const cardW = cardVertical ? 38 : 140, cardH = cardVertical ? 140 : 38;
     cardCurrentX = sugarRect.left + sugarRect.width / 2 - cardW / 2;
     cardCurrentY = sugarRect.bottom + 4;
-    guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)${cardFlipped ? ' scaleY(-1)' : ''}`;
+    guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
   });
 }
 
@@ -476,7 +476,7 @@ function onPointerMove(e) {
   const newLeft = cardCurrentX + dx;
   const newTop = cardCurrentY + dy;
   
-  const cardW = 140, cardH = 38;
+  const cardW = cardVertical ? 38 : 140, cardH = cardVertical ? 140 : 38;
   const minX = 4;
   const maxX = window.innerWidth - cardW - 4;
   const minY = 40;
@@ -484,7 +484,7 @@ function onPointerMove(e) {
   const clampedLeft = Math.max(minX, Math.min(maxX, newLeft));
   const clampedTop = Math.max(minY, Math.min(maxY, newTop));
   
-  guessCard.style.transform = `translateX(${clampedLeft}px) translateY(${clampedTop}px)${cardFlipped ? ' scaleY(-1)' : ''}`;
+  guessCard.style.transform = `translateX(${clampedLeft}px) translateY(${clampedTop}px)`;
   
   // Push sugar particles
   if (particles.length > 0) {
