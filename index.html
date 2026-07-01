@@ -425,6 +425,15 @@ function drawSugar() {
       }
     }
     
+    // Settled particles: draw and skip collision (perf)
+    // But still get pushed if an active particle overlaps them (handled from active side)
+    if (p.settled) {
+      sCtx.beginPath();
+      sCtx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+      sCtx.fillStyle = p.color;
+      sCtx.fill();
+      continue;
+    }
     // Particle-particle repulsion: direct position separation (keeps volume)
     const px = Math.floor(p.x / cellSize);
     const py2 = Math.floor(p.y / cellSize);
@@ -433,7 +442,7 @@ function drawSugar() {
         const cell = grid[gy * cols + gx];
         if (!cell) continue;
         for (const j of cell) {
-          if (j <= i) continue; // process each pair once
+          if (j === i) continue; // skip self only — active pushes settled too
           const q = particles[j];
           const dx = p.x - q.x;
           const dy = p.y - q.y;
