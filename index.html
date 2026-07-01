@@ -436,6 +436,8 @@ let cardDragStartX = 0;
 let cardDragStartY = 0;
 let cardCurrentX = -9999;
 let cardCurrentY = -9999;
+let cardLastX = null;
+let cardLastY = null;
 
 function resetCardPosition() {
   // Defer until canvas has real dimensions (screen transition may still be animating)
@@ -449,6 +451,8 @@ function resetCardPosition() {
     const cardW = cardVertical ? 38 : 140, cardH = cardVertical ? 140 : 38;
     cardCurrentX = sugarRect.left + sugarRect.width / 2 - cardW / 2;
     cardCurrentY = sugarRect.bottom + 4;
+    cardLastX = null;
+    cardLastY = null;
     guessCard.style.transform = `translateX(${cardCurrentX}px) translateY(${cardCurrentY}px)`;
   });
 }
@@ -484,7 +488,7 @@ function onPointerMove(e) {
   
   guessCard.style.transform = `translateX(${clampedLeft}px) translateY(${clampedTop}px)`;
   
-  // Push sugar particles — flat card surface, not circular
+  // Push sugar particles — flat rigid card, no invisible curve
   if (particles.length > 0) {
     const cardRect = guessCard.getBoundingClientRect();
     const canvasRect = sugarCanvas.getBoundingClientRect();
@@ -492,48 +496,51 @@ function onPointerMove(e) {
     const cardR = cardRect.right - canvasRect.left;
     const cardT = cardRect.top - canvasRect.top;
     const cardB = cardRect.bottom - canvasRect.top;
-    const cardW = cardRect.width;
-    const cardH = cardRect.height;
-    // Push zone extends slightly beyond card edges
-    const margin = 8;
+    const cardCx = (cardL + cardR) / 2;
+    const cardCy = (cardT + cardB) / 2;
+    const halfW = (cardR - cardL) / 2;
+    const halfH = (cardB - cardT) / 2;
+    // Push zone — small flat margin, not curved
+    const margin = 6;
+    // Estimate card velocity from transform delta
+    const cardVelX = clampedLeft - (cardLastX ?? clampedLeft);
+    const cardVelY = clampedTop - (cardLastY ?? clampedTop);
+    cardLastX = clampedLeft;
+    cardLastY = clampedTop;
+    const speed = Math.sqrt(cardVelX * cardVelX + cardVelY * cardVelY);
     
     for (const p of particles) {
-      // Check if particle is within or near the card's rectangle
-      const insideX = p.x >= cardL - margin && p.x <= cardR + margin;
-      const insideY = p.y >= cardT - margin && p.y <= cardB + margin;
-      if (!insideX || !insideY) continue;
+      // Distance from card center to particle — used for box-shaped push
+      const dpx = p.x - cardCx;
+      const dpy = p.y - cardCy;
+      const overlapX = halfW + margin - Math.abs(dpx);  // >0 means overlapping horizontally
+      const overlapY = halfH + margin - Math.abs(dpy);  // >0 means overlapping vertically
       
-      // Distance from particle to nearest edge of the card rectangle
-      const dxLeft = p.x - cardL;   // negative = inside left edge
-      const dxRight = cardR - p.x;   // negative = inside right edge
-      const dyTop = p.y - cardT;
-      const dyBot = cardB - p.y;
+      if (overlapX <= 0 || overlapY <= 0) continue;  // particle is outside card
       
-      // Find nearest edge and push away from it
-      const minDist = Math.min(Math.abs(dxLeft), Math.abs(dxRight), Math.abs(dyTop), Math.abs(dyBot));
-      const force = Math.max(0, (margin - minDist) / margin) * 4 + 2;
-      
-      if (minDist === Math.abs(dxLeft) && dxLeft < margin) {
-        // Push left
-        p.vx -= force;
-        p.vy += (Math.random() - 0.5) * 1.5;
-      } else if (minDist === Math.abs(dxRight) && dxRight < margin) {
-        // Push right
-        p.vx += force;
-        p.vy += (Math.random() - 0.5) * 1.5;
-      } else if (minDist === Math.abs(dyTop) && dyTop < margin) {
-        // Push up
-        p.vy -= force;
-        p.vx += (Math.random() - 0.5) * 1.5;
-      } else if (minDist === Math.abs(dyBot) && dyBot < margin) {
-        // Push down
-        p.vy += force;
-        p.vx += (Math.random() - 0.5) * 1.5;
+      // Particle is inside the card's rectangle (+margin)
+      // Push it out along the axis with LEAST overlap — flat edge, no curve
+      if (overlapX < overlapY) {
+        // Push horizontally — particle is closest to left or right edge
+        const dir = dpx > 0 ? 1 : -1;
+        const force = (speed > 0.5 ? Math.max(overlapX, speed * 0.8) : overlapX * 0.8) + 1.5;
+        p.vx += dir * force;
+        // Small vertical jitter from friction with card surface
+        p.vy += (Math.random() - 0.5) * 0.8;
       } else {
-        // Inside the card — push in direction of travel (based on card velocity)
-        p.vx += (Math.random() - 0.5) * 3;
-        p.vy += (Math.random() - 0.5) * 3;
+        // Push vertically — particle is closest to top or bottom edge
+        const dir = dpy > 0 ? 1 : -1;
+        const force = (speed > 0.5 ? Math.max(overlapY, speed * 0.8) : overlapY * 0.8) + 1.5;
+        p.vy += dir * force;
+        p.vx += (Math.random() - 0.5) * 0.8;
       }
+      
+      // If card is moving fast, add card velocity to particles (drag along surface)
+      if (speed > 1) {
+        p.vx += cardVelX * 0.3;
+        p.vy += cardVelY * 0.3;
+      }
+      
       p.settled = false;
     }
   }
